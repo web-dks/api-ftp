@@ -1,0 +1,11 @@
+# Configurações do servidor
+PORT=3000
+NODE_ENV=production
+
+# Token de segurança para a API (substitua por um token seguro)
+API_TOKEN=seu_token_seguro_aqui
+
+# Configurações do servidor FTP
+FTP_HOST=seu_servidor_ftp.com
+FTP_USER=seu_usuario
+FTP_PASSWORD=sua_senha

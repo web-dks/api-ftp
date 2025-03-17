@@ -1,0 +1,43 @@
+# Dependências
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Variáveis de ambiente
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Arquivos temporários
+temp/
+tmp/
+*.tmp
+*.temp
+
+# Logs
+logs
+*.log
+
+# Arquivos do sistema operacional
+.DS_Store
+Thumbs.db
+
+# Diretórios de compilação e distribuição
+/dist
+/build
+/out
+
+# Cobertura de teste
+/coverage
+
+# IDE e editores
+/.idea
+/.vscode
+*.swp
+*.swo
+
+# Arquivos de configuração locais
+.npmrc
