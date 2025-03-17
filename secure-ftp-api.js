@@ -104,7 +104,8 @@ async function downloadFromFtp(remotePath, fileName, localFilePath) {
       host: process.env.FTP_HOST,
       user: process.env.FTP_USER,
       password: process.env.FTP_PASSWORD,
-      secure: true,
+      port: parseInt(process.env.FTP_PORT) || 21,
+      secure: process.env.FTP_TYPE === 'FTPS',
       secureOptions: { rejectUnauthorized: false }
     });
     
@@ -145,7 +146,8 @@ async function uploadToFtp(localFilePath, remotePath, fileName) {
       host: process.env.FTP_HOST,
       user: process.env.FTP_USER,
       password: process.env.FTP_PASSWORD,
-      secure: true, // Usar FTPS (FTP sobre SSL/TLS)
+      port: parseInt(process.env.FTP_PORT) || 21,
+      secure: process.env.FTP_TYPE === 'FTPS',
       secureOptions: { rejectUnauthorized: false } // Para servidores com certificados auto-assinados
     });
     
