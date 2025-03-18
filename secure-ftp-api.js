@@ -401,16 +401,38 @@ app.post('/api/upload/direct', authenticate, upload.single('file'), async (req, 
 // Rota para recuperar arquivo do FTP
 app.get('/api/download', authenticate, async (req, res) => {
   try {
-    const { path: remotePath, fileName } = req.query;
+    const { path: remotePath, fileName, pathComplete } = req.query;
 
-    if (!remotePath || !fileName) {
+    // Verificar se temos pathComplete OU (path E fileName)
+    if ((!remotePath || !fileName) && !pathComplete) {
       return res.status(400).json({
-        error: 'Parâmetros incompletos. É necessário fornecer path e fileName'
+        error: 'Parâmetros incompletos. Forneça pathComplete OU ambos path e fileName'
       });
     }
 
+    let finalRemotePath, finalFileName;
+
+    if (pathComplete) {
+      // Usar pathComplete para extrair o caminho e o nome do arquivo
+      const lastSlashIndex = pathComplete.lastIndexOf('/');
+      
+      if (lastSlashIndex === -1) {
+        // Se não houver barra, assumimos que é apenas um nome de arquivo na raiz
+        finalRemotePath = '';
+        finalFileName = pathComplete;
+      } else {
+        // Caso contrário, separamos o caminho e o nome do arquivo
+        finalRemotePath = pathComplete.substring(0, lastSlashIndex);
+        finalFileName = pathComplete.substring(lastSlashIndex + 1);
+      }
+    } else {
+      // Usar os parâmetros individuais
+      finalRemotePath = remotePath;
+      finalFileName = fileName;
+    }
+
     // Validar fileName para evitar injeção de caminho
-    if (fileName.includes('/') || fileName.includes('\\')) {
+    if (finalFileName.includes('/') || finalFileName.includes('\\')) {
       return res.status(400).json({
         error: 'Nome de arquivo inválido. Não pode conter caracteres de caminho'
       });
@@ -418,14 +440,14 @@ app.get('/api/download', authenticate, async (req, res) => {
 
     // Criar caminho temporário para o arquivo
     const uniqueId = uuidv4();
-    const tempFilePath = path.join(DOWNLOAD_DIR, `${uniqueId}-${fileName}`);
+    const tempFilePath = path.join(DOWNLOAD_DIR, `${uniqueId}-${finalFileName}`);
 
     // Baixar arquivo do FTP
-    await downloadFromFtp(remotePath, fileName, tempFilePath);
-    console.log(`Arquivo baixado do FTP: ${remotePath}/${fileName}`);
+    await downloadFromFtp(finalRemotePath, finalFileName, tempFilePath);
+    console.log(`Arquivo baixado do FTP: ${finalRemotePath}/${finalFileName}`);
 
     // Enviar arquivo como resposta
-    res.download(tempFilePath, fileName, (err) => {
+    res.download(tempFilePath, finalFileName, (err) => {
       if (err) {
         console.error('Erro ao enviar arquivo:', err);
       }
