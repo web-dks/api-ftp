@@ -1,115 +1,16 @@
-# API Segura para Transferência FTP
+# Upload de Arquivos via URL ou Base64
 
-Uma API RESTful para transferir arquivos para um servidor FTP de forma segura. A API pode baixar arquivos de URLs ou aceitar uploads diretos, e então transferi-los para um servidor FTP usando conexão segura.
+## Endpoint: `POST /api/upload`
 
-## Funcionalidades
+Este endpoint permite enviar arquivos para o servidor FTP de duas formas diferentes:
+1. A partir de uma URL
+2. A partir de dados codificados em Base64
 
-- Recebe URL de arquivo, caminho de destino e nome do arquivo
-- Baixa o arquivo da URL fornecida
-- Envia o arquivo para um servidor FTP via conexão segura (FTPS)
-- Suporte para upload direto de arquivos (multipart/form-data)
-- Implementação de medidas de segurança robustas
-- Autenticação via token Bearer
-- Limite de taxa para prevenir abusos
-- Validação de entrada para prevenir injeções
-- Logging completo para auditoria
-
-## Requisitos
-
-- Node.js 14.x ou superior
-- Servidor FTP com suporte a conexões seguras (FTPS)
-
-## Instalação
-
-1. Clone o repositório:
-```bash
-git clone https://github.com/seu-usuario/secure-ftp-api.git
-cd secure-ftp-api
-```
-
-2. Instale as dependências:
-```bash
-npm install
-```
-
-3. Configure o arquivo `.env` com suas credenciais:
-```
-PORT=3000
-NODE_ENV=production
-API_TOKEN=seu_token_seguro_aqui
-FTP_HOST=seu_servidor_ftp.com
-FTP_USER=seu_usuario
-FTP_PASSWORD=sua_senha
-```
-
-4. Inicie o servidor:
-```bash
-npm start
-```
-
-Para desenvolvimento:
-```bash
-npm run dev
-```
-
-## Endpoints da API
-
-### Recuperação de Arquivos
-
-**Endpoint:** `GET /api/download`
-
-**Headers:**
-- `Authorization: Bearer seu_token_aqui`
-
-**Query Parameters:**
-- `path`: Caminho do diretório no servidor FTP
-- `fileName`: Nome do arquivo a ser baixado
-
-**Resposta:**
-- O arquivo será enviado como download
-- Em caso de erro, retornará um JSON com o erro
-
-### Listar Arquivos em um Diretório
-
-**Endpoint:** `GET /api/list`
-
-**Headers:**
-- `Authorization: Bearer seu_token_aqui`
-
-**Query Parameters:**
-- `path`: Caminho do diretório no servidor FTP a ser listado
-
-**Resposta de sucesso:**
-```json
-{
-  "success": true,
-  "path": "/diretorio/exemplo",
-  "files": [
-    {
-      "name": "arquivo1.pdf",
-      "size": 12345,
-      "type": 1,
-      "modifiedDate": "2023-10-15T14:30:00.000Z",
-      "isDirectory": false
-    },
-    {
-      "name": "subdiretorio",
-      "size": 0,
-      "type": 2,
-      "modifiedDate": "2023-10-14T09:15:00.000Z",
-      "isDirectory": true
-    }
-  ]
-}
-```
-
-### Upload via URL
-
-**Endpoint:** `POST /api/upload`
-
-**Headers:**
+### Headers:
 - `Authorization: Bearer seu_token_aqui`
 - `Content-Type: application/json`
+
+### Método 1: Upload via URL
 
 **Body:**
 ```json
@@ -120,77 +21,140 @@ npm run dev
 }
 ```
 
-**Resposta de sucesso:**
+### Método 2: Upload via Base64
+
+**Body:**
 ```json
 {
-  "success": true,
-  "message": "Arquivo enviado com sucesso",
-  "details": {
-    "remotePath": "/diretorio/destino/arquivo_renomeado.pdf"
-  }
+  "base64File": "JVBERi0xLjMKJcTl8uXrp/Og0...", // String Base64 (pode incluir ou não o prefixo data URI)
+  "path": "/diretorio/destino",
+  "fileName": "arquivo_renomeado.pdf"
 }
 ```
 
-### Upload direto de arquivo
+> **Nota:** O campo `base64File` pode ser uma string Base64 pura ou incluir o prefixo de data URI (ex: `data:application/pdf;base64,JVBERi...`).
 
-**Endpoint:** `POST /api/upload/direct`
-
-**Headers:**
-- `Authorization: Bearer seu_token_aqui`
-- `Content-Type: multipart/form-data`
-
-**Form-data:**
-- `file`: Arquivo a ser enviado
-- `path`: Caminho de destino no servidor FTP
-- `fileName`: (Opcional) Nome do arquivo no destino
-
-**Resposta de sucesso:**
+### Resposta de sucesso:
 ```json
 {
   "success": true,
   "message": "Arquivo enviado com sucesso",
   "details": {
-    "originalName": "arquivo_original.pdf",
+    "remotePath": "/diretorio/destino/arquivo_renomeado.pdf",
     "size": 12345,
-    "remotePath": "/diretorio/destino/arquivo_destino.pdf"
+    "contentType": "application/pdf",
+    "source": "url" // ou "base64"
   }
 }
 ```
 
-## Segurança
+### Respostas de erro:
 
-A API implementa várias camadas de segurança:
-
-1. **Autenticação**: Token Bearer para autenticar todas as requisições
-2. **Headers de segurança HTTP**: Usando Helmet para configurar headers seguros
-3. **Limitação de taxa**: Prevenção contra ataques de força bruta
-4. **Conexão FTP segura**: Usando FTPS (FTP sobre SSL/TLS)
-5. **Validação de entrada**: Verificação de parâmetros para prevenir injeções
-6. **Arquivos temporários**: Limpeza automática após processamento
-7. **Logging**: Registro detalhado para auditoria
-
-## Desenvolvimento
-
-### Estrutura de diretórios
-
-```
-secure-ftp-api/
-├── server.js         # Ponto de entrada da aplicação
-├── package.json      # Dependências e scripts
-├── .env              # Variáveis de ambiente (não comitar!)
-├── .gitignore        # Ignora arquivos para o Git
-├── temp/             # Diretório para arquivos temporários (criado automaticamente)
-└── tests/            # Testes automatizados (opcional)
+**Parâmetros incompletos:**
+```json
+{
+  "error": "Parâmetros incompletos. É necessário fornecer urlFile ou base64File, além de path e fileName"
+}
 ```
 
-### Contribuição
+**URL inválida:**
+```json
+{
+  "error": "URL inválida. Forneça uma URL completa e válida",
+  "details": "Detalhes do erro"
+}
+```
 
-1. Faça um fork do projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/nova-funcionalidade`)
-3. Faça commit das alterações (`git commit -m 'Adiciona nova funcionalidade'`)
-4. Faça push para a branch (`git push origin feature/nova-funcionalidade`)
-5. Abra um Pull Request
+**Base64 inválido:**
+```json
+{
+  "error": "Dados base64 inválidos ou vazios"
+}
+```
 
-## Licença
+**Página HTML ao invés de arquivo:**
+```json
+{
+  "error": "O URL fornecido não é um link direto para download. Use uma URL que aponte diretamente para o arquivo."
+}
+```
 
-Este projeto está licenciado sob a licença MIT - veja o arquivo LICENSE para detalhes.
+## Exemplos de uso
+
+### Exemplo com cURL (URL):
+```bash
+curl -X POST https://sua-api.onrender.com/api/upload \
+  -H "Authorization: Bearer seu_token_aqui" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "urlFile": "https://exemplo.com/arquivo.pdf",
+    "path": "/pasta",
+    "fileName": "documento.pdf"
+  }'
+```
+
+### Exemplo com cURL (Base64):
+```bash
+curl -X POST https://sua-api.onrender.com/api/upload \
+  -H "Authorization: Bearer seu_token_aqui" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base64File": "JVBERi0xLjMKJcTl8uXrp/Og0...",
+    "path": "/pasta",
+    "fileName": "documento.pdf"
+  }'
+```
+
+### Exemplo com JavaScript (URL):
+```javascript
+fetch('https://sua-api.onrender.com/api/upload', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer seu_token_aqui',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    urlFile: 'https://exemplo.com/arquivo.pdf',
+    path: '/pasta',
+    fileName: 'documento.pdf'
+  })
+})
+.then(response => response.json())
+.then(data => console.log(data))
+.catch(error => console.error('Erro:', error));
+```
+
+### Exemplo com JavaScript (Base64):
+```javascript
+// Converter um arquivo para Base64
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Exemplo com input de arquivo
+document.getElementById('fileInput').addEventListener('change', async function(e) {
+  const file = e.target.files[0];
+  const base64 = await fileToBase64(file);
+  
+  fetch('https://sua-api.onrender.com/api/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer seu_token_aqui',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      base64File: base64,
+      path: '/pasta',
+      fileName: file.name
+    })
+  })
+  .then(response => response.json())
+  .then(data => console.log(data))
+  .catch(error => console.error('Erro:', error));
+});
+```
