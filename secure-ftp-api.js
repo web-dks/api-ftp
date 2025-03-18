@@ -180,30 +180,31 @@ async function uploadToFtp(localFilePath, remotePath, fileName) {
 app.post('/api/upload', authenticate, async (req, res) => {
   try {
     const { urlFile, base64File, path: remotePath, fileName } = req.body;
-
+    
     // Verificar se pelo menos um dos métodos de upload foi fornecido
     if ((!urlFile && !base64File) || !remotePath || !fileName) {
-      return res.status(400).json({
-        error: 'Parâmetros incompletos. É necessário fornecer urlFile ou base64File, além de path e fileName'
+      return res.status(400).json({ 
+        error: 'Parâmetros incompletos. É necessário fornecer urlFile ou base64File, além de path e fileName' 
       });
     }
-
+    
     // Validar fileName para evitar injeção de caminho
     if (fileName.includes('/') || fileName.includes('\\')) {
-      return res.status(400).json({
-        error: 'Nome de arquivo inválido. Não pode conter caracteres de caminho'
+      return res.status(400).json({ 
+        error: 'Nome de arquivo inválido. Não pode conter caracteres de caminho' 
       });
     }
-
+    
     // Criar caminho temporário para o arquivo
     const tempFilePath = path.join(__dirname, 'temp', `temp-${uuidv4()}`);
-
+    
     try {
       let fileInfo = {
         size: 0,
-        contentType: null
+        contentType: null,
+        path: tempFilePath
       };
-
+      
       // Processo de obtenção do arquivo (URL ou base64)
       if (urlFile) {
         // Método 1: URL - Validar URL
@@ -215,19 +216,33 @@ app.post('/api/upload', authenticate, async (req, res) => {
             details: e.message
           });
         }
-
+        
         // Baixar arquivo da URL
         console.log(`[${new Date().toISOString()}] Iniciando download de: ${urlFile}`);
-        fileInfo = await downloadFile(urlFile, tempFilePath);
+        const downloadResult = await downloadFile(urlFile, tempFilePath);
+        
+        // Verificar se o downloadFile retornou um objeto válido
+        if (downloadResult && typeof downloadResult === 'object') {
+          fileInfo = { ...fileInfo, ...downloadResult };
+        } else {
+          // Se não retornou objeto válido, tentar obter tamanho do arquivo diretamente
+          try {
+            const stats = fs.statSync(tempFilePath);
+            fileInfo.size = stats.size;
+          } catch (statError) {
+            console.error(`[${new Date().toISOString()}] Erro ao obter stats do arquivo: ${statError.message}`);
+          }
+        }
+        
         console.log(`[${new Date().toISOString()}] Arquivo baixado: ${tempFilePath} (${fileInfo.size} bytes)`);
-      }
+      } 
       else if (base64File) {
         // Método 2: Base64
         try {
           // Verificar se o base64 tem o prefixo de data URI
           let base64Data = base64File;
           let detectedContentType = null;
-
+          
           // Se tiver o formato data:mimetype;base64,data
           if (base64File.includes(';base64,')) {
             const parts = base64File.split(';base64,');
@@ -236,30 +251,30 @@ app.post('/api/upload', authenticate, async (req, res) => {
               base64Data = parts[1];
             }
           }
-
+          
           // Decodificar o base64
           const buffer = Buffer.from(base64Data, 'base64');
-
+          
           // Verificar se o buffer parece válido
           if (buffer.length === 0) {
             return res.status(400).json({
               error: 'Dados base64 inválidos ou vazios'
             });
           }
-
+          
           // Escrever para o arquivo temporário
           fs.writeFileSync(tempFilePath, buffer);
-
+          
           // Obter informações do arquivo
           const stats = fs.statSync(tempFilePath);
           fileInfo = {
+            ...fileInfo,
             size: stats.size,
-            contentType: detectedContentType,
-            path: tempFilePath
+            contentType: detectedContentType
           };
-
+          
           console.log(`[${new Date().toISOString()}] Arquivo base64 processado: ${tempFilePath} (${fileInfo.size} bytes)`);
-
+          
           // Verificação adicional se o arquivo é muito pequeno
           if (fileInfo.size < 100) {
             // Verificar se é conteúdo HTML
@@ -278,22 +293,22 @@ app.post('/api/upload', authenticate, async (req, res) => {
           });
         }
       }
-
+      
       // Se chegou até aqui, temos um arquivo válido para enviar ao FTP
       console.log(`[${new Date().toISOString()}] Enviando para FTP: ${remotePath}/${fileName}`);
       await uploadToFtp(tempFilePath, remotePath, fileName);
       console.log(`[${new Date().toISOString()}] Arquivo enviado com sucesso`);
-
+      
       // Limpar arquivo temporário
       fs.unlinkSync(tempFilePath);
-
-      res.status(200).json({
-        success: true,
+      
+      res.status(200).json({ 
+        success: true, 
         message: 'Arquivo enviado com sucesso',
         details: {
           remotePath: `${remotePath}/${fileName}`,
-          size: fileInfo.size,
-          contentType: fileInfo.contentType,
+          size: fileInfo.size || 0,
+          contentType: fileInfo.contentType || 'application/octet-stream',
           source: urlFile ? 'url' : 'base64'
         }
       });
@@ -306,13 +321,13 @@ app.post('/api/upload', authenticate, async (req, res) => {
       } catch (cleanupError) {
         console.error(`[${new Date().toISOString()}] Erro ao limpar arquivo temporário: ${cleanupError.message}`);
       }
-
+      
       console.error(`[${new Date().toISOString()}] Erro no processamento do upload: ${error.message}`);
-
+      
       // Personalizar mensagem de erro com base no tipo de erro
       let statusCode = 500;
       let errorMessage = 'Erro ao processar o upload';
-
+      
       if (error.message.includes('HTML') || error.message.includes('página web')) {
         statusCode = 400;
         errorMessage = 'O URL fornecido não é um link direto para download. Use uma URL que aponte diretamente para o arquivo.';
@@ -323,17 +338,17 @@ app.post('/api/upload', authenticate, async (req, res) => {
         statusCode = 400;
         errorMessage = 'O servidor remoto retornou um erro ao tentar baixar o arquivo.';
       }
-
-      res.status(statusCode).json({
-        error: errorMessage,
-        details: error.message
+      
+      res.status(statusCode).json({ 
+        error: errorMessage, 
+        details: error.message 
       });
     }
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Erro geral: ${error.message}`);
-    res.status(500).json({
-      error: 'Erro ao processar o upload',
-      details: error.message
+    res.status(500).json({ 
+      error: 'Erro ao processar o upload', 
+      details: error.message 
     });
   }
 });
