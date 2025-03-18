@@ -326,9 +326,17 @@ app.get('/api/download', authenticate, async (req, res) => {
 app.get('/api/list', authenticate, async (req, res) => {
   const client = new ftp.Client();
   client.ftp.verbose = process.env.NODE_ENV === 'development';
+
+   // Aumentar o timeout
+   client.ftp.timeout = 30000; // 30 segundos (padrão é 15s)
   
   try {
     const { path: remotePath } = req.query;
+
+     
+    console.log(`Tentando listar arquivos em: ${remotePath}`);
+    console.log(`Conectando ao servidor: ${process.env.FTP_HOST}:${process.env.FTP_PORT}`);
+    
     
     if (!remotePath) {
       return res.status(400).json({ 
@@ -340,19 +348,28 @@ app.get('/api/list', authenticate, async (req, res) => {
       host: process.env.FTP_HOST,
       user: process.env.FTP_USER,
       password: process.env.FTP_PASSWORD,
-      secure: true,
+      port: parseInt(process.env.FTP_PORT) || 21,
+      secure: process.env.FTP_TYPE === 'FTPS',
       secureOptions: { rejectUnauthorized: false }
     });
+
+    // Após conexão bem-sucedida
+    console.log("Conexão FTP estabelecida com sucesso");
     
     try {
+      console.log(`Tentando acessar diretório: ${remotePath}`);
       await client.cd(remotePath);
+      console.log("Diretório acessado com sucesso");
     } catch (error) {
+      console.error(`Erro ao acessar diretório: ${error.message}`);
       return res.status(404).json({ 
         error: `Diretório não encontrado: ${remotePath}`
       });
     }
-    
+
+    console.log("Listando arquivos...");
     const list = await client.list();
+    console.log(`Encontrados ${list.length} itens`);
     
     // Formatar a lista de arquivos
     const files = list.map(item => ({
