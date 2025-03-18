@@ -375,7 +375,8 @@ app.get('/api/list', authenticate, async (req, res) => {
     const files = list.map(item => ({
       name: item.name,
       size: item.size,
-      type: item.type, // 1=arquivo, 2=diretório
+      idType: item.type, // 1=arquivo, 2=diretório
+      type: item.type === 2 ? "pasta" : "arquivo",
       modifiedDate: item.modifiedAt,
       isDirectory: item.type === 2
     }));
