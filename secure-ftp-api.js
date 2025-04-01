@@ -18,6 +18,12 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Armazena links temporários de download
+const temporaryLinks = {};
+
+// Tempo de expiração padrão para links temporários (2 horas em milissegundos)
+const DEFAULT_EXPIRATION_TIME = 2 * 60 * 60 * 1000;
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -469,6 +475,145 @@ app.get('/api/download', authenticate, async (req, res) => {
       });
     }
 
+    res.status(500).json({
+      error: 'Erro ao recuperar o arquivo',
+      details: error.message
+    });
+  }
+});
+
+// Rota para criar um link de download temporário
+app.post('/api/create-temp-link', authenticate, async (req, res) => {
+  try {
+    const { path: remotePath, fileName, pathComplete, expirationMinutes } = req.body;
+    
+    // Verificar se temos pathComplete OU (path E fileName)
+    if ((!remotePath || !fileName) && !pathComplete) {
+      return res.status(400).json({
+        error: 'Parâmetros incompletos. Forneça pathComplete OU ambos path e fileName'
+      });
+    }
+    
+    // Calcular tempo de expiração (padrão: 2 horas, ou o valor especificado em minutos)
+    const expiration = expirationMinutes 
+      ? Date.now() + (expirationMinutes * 60 * 1000) 
+      : Date.now() + DEFAULT_EXPIRATION_TIME;
+    
+    // Gerar ID único para o link
+    const linkId = uuidv4();
+    
+    // Armazenar informações do link temporário
+    temporaryLinks[linkId] = {
+      remotePath: remotePath,
+      fileName: fileName,
+      pathComplete: pathComplete,
+      expiration: expiration,
+      createdAt: Date.now()
+    };
+    
+    // Construir URL para o download
+    const downloadUrl = `${req.protocol}://${req.get('host')}/api/temp-download/${linkId}`;
+    
+    // Retornar o link de download e informações de expiração
+    res.status(200).json({
+      success: true,
+      downloadUrl: downloadUrl,
+      expiresAt: new Date(expiration).toISOString(),
+      linkId: linkId
+    });
+    
+    // Programar limpeza do link após expiração
+    setTimeout(() => {
+      delete temporaryLinks[linkId];
+      console.log(`Link temporário expirado e removido: ${linkId}`);
+    }, expiration - Date.now());
+    
+  } catch (error) {
+    console.error('Erro ao criar link temporário:', error);
+    res.status(500).json({
+      error: 'Erro ao criar link temporário',
+      details: error.message
+    });
+  }
+});
+
+// Rota para baixar arquivo usando link temporário (não requer autenticação)
+app.get('/api/temp-download/:linkId', async (req, res) => {
+  try {
+    const { linkId } = req.params;
+    
+    // Verificar se o link existe e não expirou
+    if (!temporaryLinks[linkId]) {
+      return res.status(404).json({
+        error: 'Link de download não encontrado ou expirado'
+      });
+    }
+    
+    // Verificar se o link expirou
+    if (temporaryLinks[linkId].expiration < Date.now()) {
+      // Remover link expirado
+      delete temporaryLinks[linkId];
+      return res.status(410).json({
+        error: 'Link de download expirado'
+      });
+    }
+    
+    // Extrair informações do arquivo
+    const { remotePath, fileName, pathComplete } = temporaryLinks[linkId];
+    
+    let finalRemotePath, finalFileName;
+    
+    if (pathComplete) {
+      // Usar pathComplete para extrair o caminho e o nome do arquivo
+      const lastSlashIndex = pathComplete.lastIndexOf('/');
+      
+      if (lastSlashIndex === -1) {
+        // Se não houver barra, assumimos que é apenas um nome de arquivo na raiz
+        finalRemotePath = '';
+        finalFileName = pathComplete;
+      } else {
+        // Caso contrário, separamos o caminho e o nome do arquivo
+        finalRemotePath = pathComplete.substring(0, lastSlashIndex);
+        finalFileName = pathComplete.substring(lastSlashIndex + 1);
+      }
+    } else {
+      // Usar os parâmetros individuais
+      finalRemotePath = remotePath;
+      finalFileName = fileName;
+    }
+    
+    // Criar caminho temporário para o arquivo
+    const uniqueId = uuidv4();
+    const tempFilePath = path.join(DOWNLOAD_DIR, `${uniqueId}-${finalFileName}`);
+    
+    // Baixar arquivo do FTP
+    await downloadFromFtp(finalRemotePath, finalFileName, tempFilePath);
+    console.log(`Arquivo baixado do FTP via link temporário: ${finalRemotePath}/${finalFileName}`);
+    
+    // Enviar arquivo como resposta
+    res.download(tempFilePath, finalFileName, (err) => {
+      if (err) {
+        console.error('Erro ao enviar arquivo:', err);
+      }
+      
+      // Limpar arquivo temporário após envio (ou em caso de erro)
+      try {
+        fs.unlinkSync(tempFilePath);
+      } catch (cleanupError) {
+        console.error('Erro ao limpar arquivo temporário:', cleanupError);
+      }
+    });
+    
+  } catch (error) {
+    console.error('Erro ao recuperar arquivo via link temporário:', error);
+    
+    if (error.message.includes('não encontrado')) {
+      return res.status(404).json({
+        error: 'Arquivo ou diretório não encontrado',
+        details: error.message
+      });
+    }
+    
     res.status(500).json({
       error: 'Erro ao recuperar o arquivo',
       details: error.message
