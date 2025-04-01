@@ -511,8 +511,10 @@ app.post('/api/create-temp-link', authenticate, async (req, res) => {
       createdAt: Date.now()
     };
     
-    // Construir URL para o download
-    const downloadUrl = `${req.protocol}://${req.get('host')}/api/temp-download/${linkId}`;
+    // Construir URL para o download - garantir HTTPS
+    const host = req.get('host');
+    const protocol = 'https'; // Forçar HTTPS para evitar problemas de mixed content
+    const downloadUrl = `${protocol}://${host}/api/temp-download/${linkId}`;
     
     // Retornar o link de download e informações de expiração
     res.status(200).json({
@@ -589,6 +591,12 @@ app.get('/api/temp-download/:linkId', async (req, res) => {
     // Baixar arquivo do FTP
     await downloadFromFtp(finalRemotePath, finalFileName, tempFilePath);
     console.log(`Arquivo baixado do FTP via link temporário: ${finalRemotePath}/${finalFileName}`);
+    
+    // Adicionar cabeçalhos de segurança
+    res.setHeader('Content-Security-Policy', "default-src 'self' https:;");
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     
     // Enviar arquivo como resposta
     res.download(tempFilePath, finalFileName, (err) => {
